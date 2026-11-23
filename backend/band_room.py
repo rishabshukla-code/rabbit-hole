@@ -8,6 +8,7 @@ reads the room history from BAND, thinks (Claude), and posts its message AS ITSE
 import asyncio
 import json
 import logging
+import re
 import urllib.error
 import urllib.request
 
@@ -87,18 +88,26 @@ class Band:
         return room
 
     async def post(self, room: str, agent: str, text: str, to: list[str]):
+        # address `to`, but mention every other crew member: BAND only delivers a message to the agents it
+        # mentions, and each agent must see the whole huddle when it reads the room history
         to = [t for t in to if t != agent and t in self.me] or [next(a for a in crew.AGENTS if a != agent)]
-        names = " ".join(f"@{self.me[t]['name']}" for t in to)
-        content = text if all(f"@{self.me[t]['name']}" in text for t in to) else f"{names} {text}"
+        to += [a for a in crew.AGENTS if a != agent and a not in to]
+        text = re.sub(r"@all\b[:,]?\s*", "", text, flags=re.I)  # real mentions already reach everyone
+        for t in to:  # the model writes @professor; BAND wants the agent's display name
+            text = re.sub(rf"@{t}\b", f"@{self.me[t]['name']}", text, flags=re.I)
+        missing = [f"@{self.me[t]['name']}" for t in to if f"@{self.me[t]['name']}" not in text]
+        content = (" ".join(missing) + " " + text).strip() if missing else text
         mentions = [{"id": self.me[t]["id"], "name": self.me[t]["name"]} for t in to]
         return await self.call(agent, "POST", f"/chats/{room}/messages",
                                {"message": {"content": content, "mentions": mentions}})
 
     async def history(self, room: str, agent: str) -> list[dict]:
         res = await self.call(agent, "GET", f"/chats/{room}/messages", query="?status=all&sort_order=asc&limit=100")
-        by_id = {m["id"]: m for m in self.me.values()}
-        return [{"from": next((a for a, m in self.me.items() if m["id"] == x.get("sender_id")), x.get("sender_name")),
-                 "text": x.get("content", "")} for x in res.get("data", []) if x.get("sender_id") in by_id]
+        agent_by_id = {m["id"]: a for a, m in self.me.items()}
+        names = {m["id"]: m["name"] for m in self.me.values()}
+        unmark = lambda s: re.sub(r"@\[\[([0-9a-fA-F-]+)\]\]", lambda g: "@" + names.get(g.group(1), "agent"), s or "")
+        return [{"from": agent_by_id[x["sender_id"]], "text": unmark(x.get("content"))}
+                for x in res.get("data", []) if x.get("sender_id") in agent_by_id]
 
 
 def _addressees(turn: dict, nxt: str | None, first: str) -> list[str]:
