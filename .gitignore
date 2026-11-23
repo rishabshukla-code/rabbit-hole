@@ -11,3 +11,4 @@ logs/
 logs/runs
 logs/*.log
 *.py[cod]
+backend/agent_config.yaml
