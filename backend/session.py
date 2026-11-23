@@ -339,7 +339,8 @@ class Session:
             async with self.lock:
                 return await self.end("time")
         h = self.holes.get(self.current) if self.current else None
-        if h and not h["parked"] and not h["too_long_fired"]:
+        # only a rabbit hole once you're at (or past) the depth the material needs; shallower is just learning
+        if h and not h["parked"] and not h["too_long_fired"] and h["depth"] >= h["required"]:
             limit = HOLE_LIMIT_S * self.time_factor(h["category"])
             if self.now() - h["entered_at"] > limit and self.now() - self.last_huddle >= HUDDLE_COOLDOWN_S:
                 h["too_long_fired"] = True
