@@ -67,7 +67,8 @@ function reducer(s, m) {
 }
 
 function speak(m) {
-  if (m.type === 'answer') say('professor', m.answer)
+  // answers can be long: speak only the first sentence so huddle lines never queue behind them
+  if (m.type === 'answer') say('professor', (m.answer.match(/^.*?[.!?](\s|$)/)?.[0] ?? m.answer).trim())
   else if (m.type === 'crew_msg') say(m.agent, m.text)
   else if (m.type === 'decision') say(m.by_agent, m.say)
   else if (m.type === 'quiz') say('examiner', m.question)

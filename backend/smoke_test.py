@@ -1,5 +1,6 @@
 """Plays a short scripted session over the WebSocket and prints what the crew does."""
-import asyncio, json, sys
+import asyncio, json, sys, time
+T0 = time.time()
 import websockets
 
 async def main(url="ws://127.0.0.1:8000/ws"):
@@ -9,7 +10,7 @@ async def main(url="ws://127.0.0.1:8000/ws"):
                 m = json.loads(await asyncio.wait_for(ws.recv(), timeout))
                 t = m["type"]
                 short = {k: v for k, v in m.items() if k not in ("sections", "concepts")}
-                print(f"  <- {t}: {json.dumps(short, default=str)[:230]}")
+                print(f"  {time.time()-T0:5.1f}s <- {t}: {json.dumps(short, default=str)[:230]}")
                 if t in types:
                     return m
         demo = open("content/demo_chapter.md", encoding="utf-8").read()
