@@ -14,6 +14,13 @@ function Start({ onStart, state }) {
   useEffect(() => { fetch('/api/memory').then((r) => r.json()).then(setMemory).catch(() => {}) }, [])
   const demo = () => fetch('/api/demo').then((r) => r.text()).then(setText)
   const loading = state.phase === 'loading'
+  const [since, setSince] = useState(0)
+  useEffect(() => {
+    if (!loading) return
+    const t0 = Date.now()
+    const t = setInterval(() => setSince(Math.round((Date.now() - t0) / 1000)), 500)
+    return () => { clearInterval(t); setSince(0) }
+  }, [loading])
   return (
     <div className="start">
       <h1>🕳️ Rabbit Hole</h1>
@@ -36,8 +43,10 @@ function Start({ onStart, state }) {
       </div>
       {state.error && <div className="danger">{state.error}</div>}
       <button className="primary big" disabled={!text.trim() || loading} onClick={() => onStart(text, goal, minutes)}>
-        {loading ? state.status || 'Building your map...' : 'Start'}
+        {loading ? `${state.status || 'Building your map...'} ${since}s` : 'Start'}
       </button>
+      {loading && <div className="muted">Claude is finding every concept and how deep you need it. Long texts can take up to a minute; please don't reload.</div>}
+      {!loading && text && <div className="muted small">{text.split(/\s+/).filter(Boolean).length.toLocaleString()} words · up to 6,000 per session</div>}
     </div>
   )
 }

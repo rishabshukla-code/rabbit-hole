@@ -94,7 +94,12 @@ class Session:
     async def start(self, material: str, goal: str, minutes: float):
         self.goal = goal if goal in ("gist", "task", "exam") else "task"
         self.budget_s = max(60, int(float(minutes) * 60))
-        await self.send({"type": "status", "text": "Bruin is reading your material..."})
+        words = len(material.split())
+        if words < 30:
+            return await self.send({"type": "error", "text": "That's too short to build a map. Paste at least a paragraph."})
+        if words > 6000:
+            return await self.send({"type": "error", "text": f"That's {words:,} words. Paste up to 6,000 words (one chapter or lesson) at a time."})
+        await self.send({"type": "status", "text": f"Bruin is reading your material ({words:,} words)..."})
         run, self.sections, self.concepts = await pipeline.prepare_material(self.id, material, self.goal)
         if not self.sections:
             await self.send({"type": "error", "text": "Couldn't build a map from that text. Try the demo chapter."})
