@@ -22,7 +22,9 @@ function reducer(s, m) {
       return { ...initial, phase: 'study', session: m, startedAt: Date.now(), cur: 0,
         log: [{ id: nextId++, t: Date.now(), kind: 'system',
           text: `Bruin built your map: ${m.sections.length} sections, ${m.concepts.length} concepts` +
-            (m.pipeline?.checks ? `, ${m.pipeline.checks} quality checks passed` : '') + '.' }] }
+            (m.pipeline?.checks ? `, ${m.pipeline.checks} quality checks passed` : '') + '.' },
+          ...(m.band?.enabled ? [{ id: nextId++, t: Date.now(), kind: 'system',
+            text: `Crew connected to a BAND room as ${Object.values(m.band.handles).join(', ')}.` }] : [])] }
     case 'thinking': return { ...s, thinking: m.agent }
     case 'busy': return s
     case 'answer': {
@@ -36,7 +38,7 @@ function reducer(s, m) {
       { kind: 'system', text: `Huddle: ${m.trigger.replace('_', ' ')}${m.concept ? ` on "${m.concept}"` : ''}` })
     case 'crew_msg':
       return addLog({ ...s, huddle: s.huddle ? { ...s.huddle, speakers: [...s.huddle.speakers, m.agent] } : s.huddle },
-        { kind: 'crew', agent: m.agent, to: m.to, text: m.text, vote: m.vote, emotion: m.emotion })
+        { kind: 'crew', agent: m.agent, to: m.to, text: m.text, vote: m.vote, emotion: m.emotion, via: m.via })
     case 'decision': return addLog({ ...s, decision: m },
       { kind: 'decision', text: m.decision, say: m.say, reason: m.reason, agreed_by: m.agreed_by })
     case 'huddle_end': return { ...s, busy: false, huddle: null }

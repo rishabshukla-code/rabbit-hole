@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 
+import band_room
 import crew
 import pipeline
 from config import HOLE_LIMIT_S, HUDDLE_COOLDOWN_S, MODEL, OFFLINE, SKIM_S_PER_100_WORDS
@@ -34,6 +35,9 @@ class Session:
         self.last_huddle = 0.0
         self.memory = {"policy": {}, "scores": {}, "profile": [], "sessions": 0}
         self.notes: dict[str, str] = {}
+        self.band = None
+        self.band_room: str | None = None
+        self.band_info: dict = {"enabled": False}
 
     async def send(self, msg: dict):
         async with self._send_lock:
@@ -97,6 +101,15 @@ class Session:
             return
         self.memory = pipeline.load_memory()
         self.build_notes()
+        if band_room.enabled():
+            try:
+                self.band = band_room.Band()
+                handles = await self.band.connect()
+                self.band_room = await self.band.create_room(f"Rabbit Hole huddles · {self.id}")
+                self.band_info = {"enabled": True, "room": self.band_room, "handles": handles}
+            except Exception as e:
+                log.warning("BAND unavailable, huddles run locally: %s", e)
+                self.band_info = {"enabled": False, "error": str(e)[:200]}
         self.started, self.t0 = True, self.now()
         self.cur, self.section_entered = 0, self.now()
         log_event(self.id, "session_start", count=len(self.sections), goal=self.goal)
@@ -110,7 +123,7 @@ class Session:
                        "scores": {a: round((s["accuracy"] or 0) * 100) for a, s in self.memory["scores"].items()}}
         await self.send({"type": "session", "session_id": self.id, "goal": self.goal, "budget_s": self.budget_s,
                          "sections": self.sections, "concepts": self.concepts, "pipeline": run, "welcome": welcome,
-                         "llm": {"offline": OFFLINE, "model": MODEL}})
+                         "llm": {"offline": OFFLINE, "model": MODEL}, "band": self.band_info})
 
     # ------------------------------------------------------------ messages from the browser
     async def handle(self, msg: dict):
@@ -249,9 +262,18 @@ class Session:
 
             async def on_message(turn):
                 await self.send({"type": "crew_msg", "agent": turn["agent"], "to": turn["to"], "text": turn["text"],
-                                 "emotion": turn["emotion"], "vote": turn["vote"], "src": turn.get("_src")})
+                                 "emotion": turn["emotion"], "vote": turn["vote"], "src": turn.get("_src"),
+                                 "via": turn.get("via", "local")})
 
-            d = await crew.huddle_local(trigger, sit, self.notes, on_message)
+            d = None
+            if self.band_room:
+                try:
+                    d = await band_room.huddle_band(self.band, self.band_room, trigger, sit, self.notes, on_message)
+                except Exception as e:  # BAND down mid-demo: finish this huddle locally
+                    log.warning("BAND huddle failed, falling back to local: %s", e)
+            if d is None:
+                d = await crew.huddle_local(trigger, sit, self.notes, on_message)
+                d["via"] = "local"
             log_event(self.id, "huddle", trigger=trigger, decision=d["decision"], agreed_by=",".join(d["agreed_by"]),
                       concept=h and h["concept"], category=h and h["category"],
                       section_idx=h["section_idx"] if h else extra.get("section_idx"), text=d["reason"])

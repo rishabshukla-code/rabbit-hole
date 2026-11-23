@@ -52,3 +52,4 @@
 .park-item { padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
 .park-item p { margin: 4px 0; color: var(--ink); }
 @media (max-width: 900px) { .study-main { grid-template-columns: 1fr; grid-template-rows: 45vh auto; } .panel { border-left: 0; } }
+.chip.band { background: #e6e0ff; color: #4b3bb5; }

@@ -161,6 +161,7 @@ function CrewLog({ log }) {
               <span style={{ color: a?.color }}>{a?.icon} <b>{a?.name}</b></span>
               {l.to && l.to !== 'user' ? <span className="muted"> → {l.to === 'all' ? 'crew' : AGENTS[l.to]?.name}</span> : null}: {l.text}
               {l.vote ? <span className="chip">votes {l.vote.replace('_', ' ')}</span> : null}
+              {l.via === 'band' ? <span className="chip band">via BAND</span> : null}
             </div>
           )
         })}
