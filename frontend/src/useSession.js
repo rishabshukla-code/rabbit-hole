@@ -8,7 +8,7 @@ export const initial = {
   holes: {}, current: null,
   answer: null, quiz: null, quizResult: null,
   log: [], huddle: null, thinking: null, busy: false,
-  parking: [], blocked: null, report: null, explore: {},
+  parking: [], blocked: null, report: null, explore: {}, recheck: [],
 }
 
 let nextId = 1
@@ -54,10 +54,11 @@ function reducer(s, m) {
         holes: { ...s.holes, [m.concept]: { ...h, parked: false } } }
     }
     case 'avatar': return m.action === 'climb_out' ? { ...s, current: null } : s
-    case 'moved': return { ...s, cur: m.idx, current: null, answer: null, quizResult: null }
+    case 'moved': return { ...s, cur: m.idx, current: null, answer: null, quizResult: null, quiz: null }
     case 'quiz': return addLog({ ...s, thinking: null, quiz: m, quizResult: null },
       { kind: 'crew', agent: 'examiner', to: 'user', text: m.question })
-    case 'quiz_result': return addLog({ ...s, thinking: null, quizResult: m },
+    case 'quiz_result': return addLog({ ...s, thinking: null, quizResult: m,
+      recheck: m.sent_back ? [...new Set([...s.recheck, m.section_idx])] : s.recheck.filter((i) => i !== m.section_idx) },
       { kind: 'crew', agent: 'examiner', to: 'user', text: `${m.grade.replace('_', ' ')}: ${m.feedback}` })
     case 'ending': return { ...s, phase: 'ending', status: m.text, current: null }
     case 'report': return { ...s, phase: 'report', report: m }

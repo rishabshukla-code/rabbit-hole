@@ -77,6 +77,12 @@ function Report({ state, send, onNew }) {
           ))}
         </div>
         <div className="card">
+          {r.review?.length > 0 && (
+            <div className="review">
+              <div className="card-head">📝 Review later: missed twice</div>
+              <ul>{r.review.map((t) => <li key={t}>{t}</li>)}</ul>
+            </div>
+          )}
           <div className="card-head">The crew says</div>
           {r.comments.map((c) => (
             <p key={c.agent}><span style={{ color: AGENTS[c.agent].color }}>{AGENTS[c.agent].icon} <b>{AGENTS[c.agent].name}:</b></span> {c.comment}</p>

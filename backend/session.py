@@ -32,6 +32,10 @@ class Session:
         self.current: str | None = None
         self.parking_lot: list[dict] = []
         self.pending_quiz: dict | None = None
+        self.quiz_tries: dict[int, int] = {}       # wrong/partly answers per section
+        self.questions_asked: dict[int, list] = {}  # so a retry asks something different
+        self.recheck: set[int] = set()              # sections you were sent back to re-read
+        self.review: list[str] = []                 # sections missed twice -> "Review later" in the report
         self.last_huddle = 0.0
         self.memory = {"policy": {}, "scores": {}, "profile": [], "sessions": 0}
         self.notes: dict[str, str] = {}
@@ -229,7 +233,9 @@ class Session:
         if forward:
             sec = self.sections[prev]
             skim_limit = sec["word_count"] / 100 * SKIM_S_PER_100_WORDS
-            if dur < skim_limit and prev not in self.quizzed and self.now() - self.last_huddle >= HUDDLE_COOLDOWN_S:
+            if prev in self.recheck:                 # came back to re-read after a wrong answer: ask again, differently
+                await self.start_quiz(prev, "re-check")
+            elif dur < skim_limit and prev not in self.quizzed and self.now() - self.last_huddle >= HUDDLE_COOLDOWN_S:
                 await self.huddle("skimmed", None, section_idx=prev, seconds=round(dur, 1))
             elif sec.get("is_key") and prev not in self.quizzed:
                 await self.start_quiz(prev, "key section")
@@ -312,7 +318,9 @@ class Session:
         self.quizzed.add(idx)
         sec = self.sections[idx]
         await self.send({"type": "thinking", "agent": "examiner"})
-        q = await crew.quiz_question(sec, self.goal)
+        asked = self.questions_asked.setdefault(idx, [])
+        q = await crew.quiz_question(sec, self.goal, avoid=asked)
+        asked.append(q["question"])
         self.pending_quiz = {"section_idx": idx, "question": q["question"], "why": why, "hole": hole}
         log_event(self.id, "quiz_asked", section_idx=idx, text=q["question"])
         await self.send({"type": "quiz", "agent": "examiner", "section_idx": idx, "question": q["question"], "why": why})
@@ -322,12 +330,36 @@ class Session:
         if not pq:
             return
         self.pending_quiz = None
-        sec = self.sections[pq["section_idx"]]
+        idx = pq["section_idx"]
+        sec = self.sections[idx]
         await self.send({"type": "thinking", "agent": "examiner"})
         g = await crew.grade(sec, pq["question"], text)
-        log_event(self.id, "quiz_graded", section_idx=pq["section_idx"], grade=g["grade"], text=text)
-        await self.send({"type": "quiz_result", "agent": "examiner", "section_idx": pq["section_idx"], **g})
+        log_event(self.id, "quiz_graded", section_idx=idx, grade=g["grade"], text=text)
         h = self.holes.get(pq["hole"] or "")
+        if not h and g["grade"] != "got_it":
+            # adapt: wrong or partly right sends you back to re-read; a different question when you come back.
+            # Two tries per section, then it's flagged for review instead of looping.
+            tries = self.quiz_tries[idx] = self.quiz_tries.get(idx, 0) + 1
+            if tries < 2:
+                self.recheck.add(idx)
+                if self.cur != idx:
+                    await self.on_goto(idx)          # walk back to that stone (a backward move, nothing logged as finished)
+                await self.send({"type": "quiz_result", "agent": "examiner", "section_idx": idx, "sent_back": True, **g})
+                await self.send({"type": "crew_msg", "agent": "examiner", "to": "user", "emotion": "skeptical", "solo": True,
+                                 "text": f"Let's go back to '{sec['title']}'. Re-read the highlighted part, press Next, "
+                                         f"and I'll ask you a different question."})
+                return
+            self.recheck.discard(idx)
+            if sec["title"] not in self.review:
+                self.review.append(sec["title"])
+            await self.send({"type": "quiz_result", "agent": "examiner", "section_idx": idx, **g})
+            await self.send({"type": "crew_msg", "agent": "navigator", "to": "user", "emotion": "neutral", "solo": True,
+                             "text": f"Two tries is plenty for now. I've flagged '{sec['title']}' under Review later in your "
+                                     f"report. Let's keep moving."})
+            return
+        if not h and idx in self.recheck:
+            self.recheck.discard(idx)
+        await self.send({"type": "quiz_result", "agent": "examiner", "section_idx": idx, **g})
         if h and not h["parked"]:
             if g["grade"] == "got_it":
                 await self.apply("continue", h)
@@ -367,6 +399,7 @@ class Session:
         comments = await crew.final_comments(report, digs, self.notes)
         next_time = [p["note"] for p in memory_after["policy"].values() if p.get("note")]
         await self.send({"type": "report", "report": report, "holes": digs, "parking_lot": self.parking_lot,
+                         "review": self.review,
                          "comments": comments, "pipeline": run, "next_time": next_time,
                          "scores": {a: {"accuracy": round((s["accuracy"] or 0) * 100), "decisions": s["decisions"]}
                                     for a, s in memory_after["scores"].items()}})

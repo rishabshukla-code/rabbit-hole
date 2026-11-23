@@ -42,10 +42,12 @@ function Reading({ state, send, disabled }) {
     if (t && t.length < 60 && box.current?.contains(window.getSelection().anchorNode)) setSel(t)
     else setSel(null)
   }
-  const reread = state.quizResult?.reread
-  const html = reread && sec.text.includes(reread)
-    ? sec.text.split(reread).flatMap((p, i, a) => (i < a.length - 1 ? [p, <mark key={i}>{reread}</mark>] : [p]))
+  const reread = state.quizResult?.section_idx === cur ? state.quizResult?.reread?.trim() : ''
+  const at = reread ? sec.text.toLowerCase().indexOf(reread.toLowerCase()) : -1
+  const html = at >= 0
+    ? [sec.text.slice(0, at), <mark key="m">{sec.text.slice(at, at + reread.length)}</mark>, sec.text.slice(at + reread.length)]
     : sec.text
+  const rechecking = state.recheck.includes(cur)
   return (
     <div className="card reading">
       <div className="card-head">Reading · {cur + 1}. {sec.title} {sec.is_key ? <span className="chip">key</span> : null}</div>
@@ -59,7 +61,8 @@ function Reading({ state, send, disabled }) {
         <span className="spacer" />
         {last
           ? <button className="primary" disabled={disabled} onClick={() => send({ type: 'finish' })}>Finish ✓</button>
-          : <button className="primary" disabled={disabled} onClick={() => send({ type: 'goto', idx: cur + 1 })}>Next →</button>}
+          : <button className="primary" disabled={disabled} onClick={() => send({ type: 'goto', idx: cur + 1 })}>
+            {rechecking ? "I've re-read it →" : 'Next →'}</button>}
       </div>
     </div>
   )
@@ -86,8 +89,10 @@ function AnswerCard({ state, send, disabled }) {
   }
   if (quizResult) {
     const g = { got_it: '✅ Got it', partly: '🟡 Partly', missed: '❌ Missed' }[quizResult.grade]
-    return <div className="card answer"><div className="card-head">📝 Examiner · {g}</div><p>{quizResult.feedback}</p>
-      {quizResult.reread ? <p className="muted">Re-read the highlighted bit.</p> : null}</div>
+    return <div className={`card answer ${quizResult.sent_back ? 'quiz' : ''}`}><div className="card-head">📝 Examiner · {g}</div><p>{quizResult.feedback}</p>
+      {quizResult.sent_back
+        ? <p className="hint danger">Back to this section: re-read the highlighted part, then press "I've re-read it". You'll get a different question.</p>
+        : quizResult.reread ? <p className="muted">Re-read the highlighted bit when you can.</p> : null}</div>
   }
   if (blocked) {
     return (

@@ -192,12 +192,18 @@ async def huddle_local(trigger: str, situation: dict, memory_notes: dict, on_mes
 
 # ---------------------------------------------------------------- quiz (Examiner)
 
-async def quiz_question(section: dict, goal: str) -> dict:
+async def quiz_question(section: dict, goal: str, avoid: list[str] | None = None) -> dict:
+    avoid = avoid or []
     system = PERSONA["examiner"] + (" Write ONE quick check question about the main point of this section, "
-                                    "answerable in one sentence. No trick questions.")
-    return await ask_json(system, _j({"goal": goal, "section": section["title"], "text": section["text"]}),
+                                    "answerable in one sentence. No trick questions.") + (
+        " The learner already got these wrong and has just re-read the section: ask about the same main point "
+        "from a DIFFERENT angle, a little simpler, and never repeat these questions." if avoid else "")
+    fallbacks = [f"In one sentence: what did '{section['title']}' make you do, and why?",
+                 f"Say it another way: what is the one thing to remember from '{section['title']}'?"]
+    return await ask_json(system, _j({"goal": goal, "section": section["title"], "text": section["text"],
+                                      "already_asked": avoid}),
                           obj({"question": {"type": "string"}}),
-                          lambda: {"question": f"In one sentence: what did '{section['title']}' make you do, and why?"},
+                          lambda: {"question": fallbacks[min(len(avoid), 1)]},
                           max_tokens=1500)
 
 
