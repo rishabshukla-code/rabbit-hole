@@ -6,6 +6,7 @@ import logging
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import PlainTextResponse
 
+import pipeline
 from config import CONTENT, MODEL, OFFLINE
 from session import Session
 
@@ -22,6 +23,14 @@ def health():
 @app.get("/api/demo", response_class=PlainTextResponse)
 def demo():
     return (CONTENT / "demo_chapter.md").read_text(encoding="utf-8")
+
+
+@app.get("/api/memory")
+def memory():
+    m = pipeline.load_memory()
+    return {"sessions": m["sessions"],
+            "notes": [p["note"] for p in m["policy"].values() if p.get("note")],
+            "scores": {a: round((s["accuracy"] or 0) * 100) for a, s in m["scores"].items()}}
 
 
 @app.websocket("/ws")

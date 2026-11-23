@@ -117,6 +117,10 @@ class Session:
         kind = msg.get("type")
         if kind == "start":
             return await self.start(msg.get("material", ""), msg.get("goal", "task"), msg.get("minutes", 5))
+        if kind == "explore" and self.ended:     # after the session: free digging, no crew interruptions
+            res = await crew.ask(msg.get("text", ""), section=self.sections[0], goal="exam", concepts=self.concepts,
+                                 hole={"concept": msg.get("concept", ""), "depth": 2}, history=[])
+            return await self.send({"type": "explore_answer", "concept": msg.get("concept"), "answer": res["answer"]})
         if not self.started or self.ended:
             return
         if self.busy and kind not in ("ping",):
